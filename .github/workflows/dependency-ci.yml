@@ -1,0 +1,42 @@
+name: Dependency CI
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dependency-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [initial, complete]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build and test both build systems
+        working-directory: ${{ matrix.project }}
+        run: |
+          chmod +x mvnw gradlew
+          ./mvnw --batch-mode clean verify
+          ./gradlew --no-daemon clean build
+  gate:
+    name: Dependency CI Gate
+    if: always()
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every verification job to succeed
+        env:
+          RESULT: ${{ needs.verify.result }}
+        run: test "$RESULT" = success
